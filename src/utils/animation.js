@@ -1,15 +1,14 @@
 /**
- * Computes the total sequential duration of a scene's graphics
- * (max of delay + duration across all items).
+ * Computes the total sequential duration of a scene —
+ * graphics draw one-by-one so total = sum of all durations.
  */
 export function getSceneDuration(scene) {
   if (!scene || scene.graphics.length === 0) return 1;
-  return scene.graphics.reduce((max, g) => Math.max(max, g.delay + g.duration), 0);
+  return scene.graphics.reduce((sum, g) => sum + g.duration, 0);
 }
 
 /**
  * Returns a CSS animation style object for the "draw-in" effect.
- * Mirrors the WPF StrokeDashOffset animation (reveal from left-to-right).
  */
 export function getDrawInStyle(graphic, playing) {
   if (!playing) return {};

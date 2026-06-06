@@ -103,7 +103,7 @@ export default function TopBar() {
     {
       label: 'Help',
       items: [
-        { icon: 'ℹ', label: 'About OpenDoodler', action: () => window.open('https://github.com/Rsverma/OpenDoodler', '_blank') },
+        { icon: 'ℹ', label: 'About Whiteboard Animation', action: () => window.open('https://github.com/Rsverma/OpenDoodler', '_blank') },
       ],
     },
   ] : [];

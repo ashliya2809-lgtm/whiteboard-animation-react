@@ -27,10 +27,10 @@ export default function LaunchView() {
           background: 'linear-gradient(135deg, #f1f5f9 30%, #f59e0b 100%)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
         }}>
-          OpenDoodler
+          Whiteboard Animation
         </h1>
         <p style={{ color: '#64748b', marginTop: 8, fontSize: 17 }}>
-          Open source whiteboard animation editor
+          whiteboard animation editor
         </p>
       </div>
 

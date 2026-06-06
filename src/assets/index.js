@@ -7,6 +7,13 @@ export const BOARD_TYPES = [
 
 // ─── System fonts ─────────────────────────────────────────────────────────────
 export const SYSTEM_FONTS = [
+  // These have TTF files in public/ and render as real strokes during animation
+  'Pacifico',
+  'Caveat',
+  'Dancing Script',
+  'Open Sans',
+  // System fonts (fall back to Open Sans for stroke animation)
+  
   'Georgia',
   'Times New Roman',
   'Arial',
