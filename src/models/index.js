@@ -21,6 +21,8 @@ export function createScene(name = '1') {
     id: uid(),
     name,
     graphics: [],
+    transition: 'none', // 'none', 'fade', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'zoomIn', 'zoomOut'
+    transitionDuration: 0.5, // in seconds
   };
 }
 

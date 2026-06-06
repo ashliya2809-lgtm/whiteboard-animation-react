@@ -4,52 +4,58 @@ import SvgRenderer from '../shared/SvgRenderer';
 import AnimatedSvgRenderer from '../shared/AnimatedSvgRenderer';
 import AnimatedTextReveal from '../shared/AnimatedTextReveal';
 import WhiteboardHand from '../shared/WhiteboardHand';
-import { getBoardStyle } from '../../utils/animation';
+import { getBoardStyle, getTransitionStyle } from '../../utils/animation';
 
-/**
- * Sequential timeline: graphic N starts exactly when graphic N-1 finishes.
- * Total duration = sum of all g.duration values.
- */
-function buildSequentialTimeline(graphics) {
+// Speed multiplier → duration divisor
+// e.g. speed=2 means durations are halved (twice as fast)
+const SPEED_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3];
+const SPEED_LABELS = ['0.25×', '0.5×', '0.75×', '1×', '1.5×', '2×', '3×'];
+const DEFAULT_SPEED_IDX = 3; // 1×
+
+function buildSequentialTimeline(graphics, speed = 1) {
   let cursor = 0;
   return graphics.map(g => {
-    const seqDelay = cursor;
+    const seqDelay    = cursor / speed;
+    const scaledDur   = g.duration / speed;
     cursor += g.duration;
-    return { ...g, seqDelay };
+    return { ...g, seqDelay, scaledDur };
   });
 }
 
-function getSequentialDuration(graphics) {
-  return graphics.reduce((sum, g) => sum + g.duration, 0);
+function getSequentialDuration(graphics, speed = 1) {
+  return graphics.reduce((sum, g) => sum + g.duration, 0) / speed;
 }
 
 export default function PreviewModal() {
   const project           = useStore(s => s.project);
   const closePreviewModal = useStore(s => s.closePreviewModal);
 
-  const [playing,  setPlaying]  = useState(false);
-  const [sceneIdx, setSceneIdx] = useState(0);
-  // canvasKey only changes when we switch scenes or hard-reset, NOT mid-play
+  const [playing,   setPlaying]   = useState(false);
+  const [sceneIdx,  setSceneIdx]  = useState(0);
   const [canvasKey, setCanvasKey] = useState(0);
+  const [speedIdx,  setSpeedIdx]  = useState(DEFAULT_SPEED_IDX);
 
-  const tipRef        = useRef({ active: false });
-  const canvasRef     = useRef(null);
-  const activeIdRef   = useRef(null);
-  const timerRef      = useRef(null);
-  const playStartRef  = useRef(null);  // performance.now() when play started
+  const speed = SPEED_STEPS[speedIdx];
+
+  const tipRef       = useRef({ active: false });
+  const canvasRef    = useRef(null);
+  const activeIdRef  = useRef(null);
+  const timerRef     = useRef(null);
+  const playStartRef = useRef(null);
 
   const scenes     = project?.scenes ?? [];
   const scene      = scenes[sceneIdx];
   const boardStyle = getBoardStyle(project?.boardType ?? 'whiteboard');
-  const timeline   = scene ? buildSequentialTimeline(scene.graphics) : [];
+  const timeline   = scene ? buildSequentialTimeline(scene.graphics, speed) : [];
+  const transitionStyle = playing && scene ? getTransitionStyle(scene.transition, scene.transitionDuration || 0.5) : {};
 
   const reset = () => {
     clearTimeout(timerRef.current);
     setPlaying(false);
     setSceneIdx(0);
-    setCanvasKey(k => k + 1);   // remount canvas to clear all animations
-    tipRef.current       = { active: false };
-    activeIdRef.current  = null;
+    setCanvasKey(k => k + 1);
+    tipRef.current      = { active: false };
+    activeIdRef.current = null;
     playStartRef.current = null;
   };
 
@@ -57,7 +63,6 @@ export default function PreviewModal() {
     clearTimeout(timerRef.current);
     tipRef.current      = { active: false };
     activeIdRef.current = null;
-    // Remount canvas fresh, then start playing
     setSceneIdx(0);
     setCanvasKey(k => k + 1);
     setPlaying(false);
@@ -69,21 +74,23 @@ export default function PreviewModal() {
   };
 
   const scheduleNextScene = (idx) => {
-    if (idx >= scenes.length) {
-      setPlaying(false);
-      return;
-    }
-    const dur = getSequentialDuration(scenes[idx].graphics);
+    if (idx >= scenes.length) { setPlaying(false); return; }
+    const currentScene = scenes[idx];
+    const dur = getSequentialDuration(currentScene.graphics, speed);
+    const transitionDur = (currentScene.transition && currentScene.transition !== 'none') 
+      ? (currentScene.transitionDuration || 0.5) 
+      : 0;
+    const totalDur = dur + transitionDur;
+    
     timerRef.current = setTimeout(() => {
       if (idx + 1 < scenes.length) {
-        // Switch to next scene — remount canvas for new scene
         setSceneIdx(idx + 1);
         setCanvasKey(k => k + 1);
         scheduleNextScene(idx + 1);
       } else {
         setPlaying(false);
       }
-    }, (dur + 0.5) * 1000);
+    }, (totalDur + 0.5) * 1000);
   };
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -105,6 +112,12 @@ export default function PreviewModal() {
     }
   }, []);
 
+  const handleSpeedChange = (e) => {
+    setSpeedIdx(Number(e.target.value));
+    // No restart needed — AnimatedTextReveal reads duration/delay via live
+    // refs, so the running rAF loop picks up the new speed on the next frame.
+  };
+
   return (
     <div
       style={{
@@ -121,6 +134,7 @@ export default function PreviewModal() {
         animation: 'modalIn 0.2s cubic-bezier(0.34,1.56,0.64,1)',
         maxWidth: '95vw',
       }}>
+
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: '#f1f5f9', margin: 0 }}>
@@ -132,7 +146,7 @@ export default function PreviewModal() {
           >✕</button>
         </div>
 
-        {/* Canvas — key only changes on scene switch or reset, never mid-animation */}
+        {/* Canvas */}
         <div
           key={canvasKey}
           ref={canvasRef}
@@ -141,6 +155,7 @@ export default function PreviewModal() {
             ...boardStyle,
             borderRadius: 8, overflow: 'hidden',
             maxWidth: '100%',
+            ...transitionStyle,
           }}
         >
           {timeline.map(g => (
@@ -155,7 +170,7 @@ export default function PreviewModal() {
                     svg={g.svgText}
                     style={{ width: '100%', height: '100%' }}
                     playing={playing}
-                    duration={g.duration}
+                    duration={g.scaledDur}
                     delay={g.seqDelay}
                     onTipMove={makeTipHandler(g.id)}
                   />
@@ -167,7 +182,7 @@ export default function PreviewModal() {
                   key={`${g.id}-play`}
                   graphic={{ ...g, boardType: project?.boardType }}
                   playing={playing}
-                  duration={g.duration}
+                  duration={g.scaledDur}
                   delay={g.seqDelay}
                   onTipMove={makeTipHandler(g.id)}
                   playStartTime={playStartRef.current}
@@ -190,7 +205,8 @@ export default function PreviewModal() {
         </div>
 
         {/* Controls */}
-        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}>
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
+
           <button
             onClick={play}
             disabled={playing}
@@ -213,6 +229,33 @@ export default function PreviewModal() {
               borderRadius: 8, color: '#94a3b8', cursor: 'pointer',
             }}
           >↺ Reset</button>
+
+          {/* Speed slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ color: '#64748b', fontSize: 12, whiteSpace: 'nowrap' }}>🐢</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <input
+                type="range"
+                min={0}
+                max={SPEED_STEPS.length - 1}
+                step={1}
+                value={speedIdx}
+                onChange={handleSpeedChange}
+                style={{
+                  width: 120,
+                  accentColor: '#10b981',
+                  cursor: 'pointer',
+                }}
+              />
+              <span style={{
+                color: '#10b981', fontSize: 11, fontWeight: 700,
+                fontFamily: 'monospace', letterSpacing: '0.05em',
+              }}>
+                {SPEED_LABELS[speedIdx]}
+              </span>
+            </div>
+            <span style={{ color: '#64748b', fontSize: 12, whiteSpace: 'nowrap' }}>🐇</span>
+          </div>
 
           <span style={{ color: '#64748b', fontSize: 12 }}>
             Scene {sceneIdx + 1} / {scenes.length}

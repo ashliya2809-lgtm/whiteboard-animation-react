@@ -1,27 +1,38 @@
 import SvgRenderer from '../shared/SvgRenderer';
 import { useStore } from '../../store';
 
-export default function GraphicListItem({ graphic, isSelected }) {
-  const selectGraphic = useStore(s => s.selectGraphic);
+export default function GraphicListItem({ graphic, isSelected, onDragStart, onDragOver, onDrop, onDragEnd, isDragOver }) {
+  const selectGraphic      = useStore(s => s.selectGraphic);
   const updateGraphicProps = useStore(s => s.updateGraphicProps);
-  const deleteGraphic = useStore(s => s.deleteGraphic);
-  const duplicateGraphic = useStore(s => s.duplicateGraphic);
+  const duplicateGraphic   = useStore(s => s.duplicateGraphic);
 
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       onClick={() => selectGraphic(isSelected ? null : graphic.id)}
       style={{
         background: isSelected ? '#172554' : '#1e293b',
-        border: `1px solid ${isSelected ? '#3b82f6' : '#334155'}`,
+        border: `1px solid ${isSelected ? '#3b82f6' : isDragOver ? '#f59e0b' : '#334155'}`,
         borderRadius: 8, marginBottom: 6, padding: '8px 10px',
-        cursor: 'pointer', transition: 'all 0.15s',
+        cursor: 'grab', transition: 'all 0.15s',
         userSelect: 'none',
+        opacity: isDragOver ? 0.6 : 1,
+        boxShadow: isDragOver ? '0 0 0 2px #f59e0b60' : 'none',
       }}
       onMouseEnter={e => { if (!isSelected) e.currentTarget.style.borderColor = '#475569'; }}
-      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = '#334155'; }}
+      onMouseLeave={e => { if (!isSelected && !isDragOver) e.currentTarget.style.borderColor = '#334155'; }}
     >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Drag handle */}
+        <div style={{ color: '#475569', fontSize: 14, cursor: 'grab', flexShrink: 0, lineHeight: 1 }}>
+          ⠿
+        </div>
+
         {/* Thumbnail */}
         <div style={{
           width: 36, height: 36, flexShrink: 0, background: '#0f172a',
@@ -55,7 +66,7 @@ export default function GraphicListItem({ graphic, isSelected }) {
           </div>
         </div>
 
-        {/* Quick delete */}
+        {/* Duplicate */}
         {isSelected && (
           <button
             onClick={e => { e.stopPropagation(); duplicateGraphic(graphic.id); }}
@@ -72,18 +83,10 @@ export default function GraphicListItem({ graphic, isSelected }) {
       {isSelected && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Row label="Delay (s)">
-            <NumInput
-              value={graphic.delay}
-              min={0} step={0.5}
-              onChange={v => updateGraphicProps(graphic.id, { delay: v })}
-            />
+            <NumInput value={graphic.delay} min={0} step={0.5} onChange={v => updateGraphicProps(graphic.id, { delay: v })} />
           </Row>
           <Row label="Duration (s)">
-            <NumInput
-              value={graphic.duration}
-              min={0.1} step={0.5}
-              onChange={v => updateGraphicProps(graphic.id, { duration: v })}
-            />
+            <NumInput value={graphic.duration} min={0.1} step={0.5} onChange={v => updateGraphicProps(graphic.id, { duration: v })} />
           </Row>
           <Row label="Position">
             <div style={{ display: 'flex', gap: 4 }}>

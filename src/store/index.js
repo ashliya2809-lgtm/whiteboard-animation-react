@@ -220,21 +220,26 @@ export const useStore = create((set, get) => ({
 
   moveScene(fromIdx, toIdx) {
     if (fromIdx === toIdx) return;
+    
     set(state => {
       const hist = pushHistory(state);
-      return produce({ ...state, ...hist }, draft => {
-        const [scene] = draft.project.scenes.splice(fromIdx, 1);
-        draft.project.scenes.splice(toIdx, 0, scene);
-        draft.project.scenes.forEach((s, i) => { s.name = String(i + 1); });
+      const result = produce({ ...state, ...hist }, draft => {
+        const removed = draft.project.scenes.splice(fromIdx, 1);
+        draft.project.scenes.splice(toIdx, 0, removed[0]);
       });
+      
+      return result;
     });
   },
 
   updateSceneSettings(sceneId, changes) {
-    set(state => produce(state, draft => {
-      const scene = draft.project.scenes.find(s => s.id === sceneId);
-      if (scene) Object.assign(scene, changes);
-    }));
+    set(state => {
+      const hist = pushHistory(state);
+      return produce({ ...state, ...hist }, draft => {
+        const scene = draft.project.scenes.find(s => s.id === sceneId);
+        if (scene) Object.assign(scene, changes);
+      });
+    });
   },
 
   // ── Graphic actions ────────────────────────────────────────────────────────
@@ -331,6 +336,21 @@ export const useStore = create((set, get) => ({
         if (to < 0 || to >= scene.graphics.length) return;
         const [g] = scene.graphics.splice(idx, 1);
         scene.graphics.splice(to, 0, g);
+      });
+    });
+  },
+
+  reorderGraphic(fromIdx, toIdx) {
+    set(state => {
+      const hist = pushHistory(state);
+      return produce({ ...state, ...hist }, draft => {
+        const scene = draft.project.scenes.find(s => s.id === draft.selectedSceneId);
+        if (!scene) return;
+        if (fromIdx === toIdx) return;
+        if (fromIdx < 0 || fromIdx >= scene.graphics.length) return;
+        if (toIdx   < 0 || toIdx   >= scene.graphics.length) return;
+        const [g] = scene.graphics.splice(fromIdx, 1);
+        scene.graphics.splice(toIdx, 0, g);
       });
     });
   },

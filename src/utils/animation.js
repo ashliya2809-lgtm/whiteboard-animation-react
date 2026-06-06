@@ -50,3 +50,75 @@ export function getBoardStyle(boardType) {
  * Canvas is 800x450; thumbnail is 128x72.
  */
 export const THUMBNAIL_SCALE = 128 / 800;
+
+/**
+ * Returns CSS animation keyframes and style for scene transitions
+ */
+export function getTransitionStyle(transition, duration, isEntering = true) {
+  if (!transition || transition === 'none') return {};
+  
+  const transitionMap = {
+    fade: {
+      keyframes: `@keyframes sceneTransitionFade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }`,
+      animation: `sceneTransitionFade ${duration}s ease-in-out forwards`,
+    },
+    slideLeft: {
+      keyframes: `@keyframes sceneTransitionSlideLeft {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }`,
+      animation: `sceneTransitionSlideLeft ${duration}s ease-out forwards`,
+    },
+    slideRight: {
+      keyframes: `@keyframes sceneTransitionSlideRight {
+        from { transform: translateX(-100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }`,
+      animation: `sceneTransitionSlideRight ${duration}s ease-out forwards`,
+    },
+    slideUp: {
+      keyframes: `@keyframes sceneTransitionSlideUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }`,
+      animation: `sceneTransitionSlideUp ${duration}s ease-out forwards`,
+    },
+    slideDown: {
+      keyframes: `@keyframes sceneTransitionSlideDown {
+        from { transform: translateY(-100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }`,
+      animation: `sceneTransitionSlideDown ${duration}s ease-out forwards`,
+    },
+    zoomIn: {
+      keyframes: `@keyframes sceneTransitionZoomIn {
+        from { transform: scale(0.8); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }`,
+      animation: `sceneTransitionZoomIn ${duration}s ease-out forwards`,
+    },
+    zoomOut: {
+      keyframes: `@keyframes sceneTransitionZoomOut {
+        from { transform: scale(1.2); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }`,
+      animation: `sceneTransitionZoomOut ${duration}s ease-out forwards`,
+    },
+  };
+
+  const trans = transitionMap[transition];
+  if (!trans) return {};
+  
+  // Inject keyframes into a style tag if not already present
+  if (!document.getElementById(`transition-${transition}`)) {
+    const style = document.createElement('style');
+    style.id = `transition-${transition}`;
+    style.innerHTML = trans.keyframes;
+    document.head.appendChild(style);
+  }
+
+  return { animation: trans.animation };
+}

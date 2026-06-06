@@ -1,41 +1,39 @@
 import { useEffect, useRef, useState } from 'react';
 import { textToSvgPaths, warmFont } from '../../services/fontService';
 
-/**
- * AnimatedTextReveal
- *
- * Pre-loads the font on mount so it's ready before play starts.
- * Uses `playStartTime` (performance.now() from parent) as the
- * shared clock — so even if font loading took a moment, timing
- * is always correct relative to when Play was pressed.
- */
 export default function AnimatedTextReveal({
   graphic, playing, duration, delay, onTipMove, playStartTime,
 }) {
   const [svgData, setSvgData] = useState(null);
 
-  const svgRef   = useRef(null);
-  const rafRef   = useRef(null);
+  const svgRef       = useRef(null);
+  const rafRef       = useRef(null);
+  const startRef     = useRef(null);
+  // Live refs — tick always reads the latest speed without restarting
+  const durationRef  = useRef(duration);
+  const delayRef     = useRef(delay);
 
-  // ── Pre-load font immediately on mount (before play starts) ──────────────
+  // Keep live refs in sync with props every render
+  durationRef.current = duration;
+  delayRef.current    = delay;
+
+  // ── Pre-load font ──────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    // Warm the cache first (no-op if already loaded)
     warmFont(graphic.fontFamily || 'Open Sans').then(() => {
       if (cancelled) return;
       return textToSvgPaths(
-        graphic.rawText  || ' ',
+        graphic.rawText   || ' ',
         graphic.fontFamily || 'Open Sans',
         graphic.fontSize   || 72,
       );
     }).then(data => {
       if (!cancelled && data) setSvgData(data);
     }).catch(err => console.warn('Font load error:', err));
-
     return () => { cancelled = true; };
   }, [graphic.rawText, graphic.fontFamily, graphic.fontSize]);
 
-  // ── Run animation when both svgData AND playing are ready ────────────────
+  // ── Animation loop ─────────────────────────────────────────────────────────
   useEffect(() => {
     const svgEl = svgRef.current;
     cancelAnimationFrame(rafRef.current);
@@ -44,98 +42,109 @@ export default function AnimatedTextReveal({
 
     const strokes = Array.from(svgEl.querySelectorAll('path'));
 
-    // Static mode — show fully drawn
+    // Static — show fully drawn
     if (!playing) {
       onTipMove?.({ active: false });
       strokes.forEach(p => {
         p.style.strokeDasharray  = '';
         p.style.strokeDashoffset = '';
         p.style.opacity = '1';
-        p.setAttribute('fill', p.dataset.origFill || 'none');
+        if (p.dataset.origFill) {
+          p.setAttribute('fill', p.dataset.origFill);
+          delete p.dataset.origFill;
+        }
       });
       return;
     }
 
     if (strokes.length === 0) { onTipMove?.({ active: false }); return; }
 
-    const perStroke = duration / Math.max(strokes.length, 1);
-
     const vb  = svgEl.viewBox.baseVal;
     const vbW = vb.width  || 100;
     const vbH = vb.height || 100;
 
-    // Measure + init all strokes hidden
-    const meta = strokes.map((p, i) => {
-      let length = 0;
-      try { length = p.getTotalLength(); } catch (_) { length = 200; }
+    // Measure path lengths + store normalised progress position (0–1) per stroke
+    // We store the FRACTION of total path each stroke occupies so we can
+    // remap to any duration at runtime without rebuilding meta.
+    const totalStrokes = strokes.length;
+    const lengths = strokes.map(p => {
+      let len = 0;
+      try { len = p.getTotalLength(); } catch (_) { len = 200; }
+      return len;
+    });
+
+    // Init all strokes hidden
+    strokes.forEach((p, i) => {
       p.style.opacity          = '0';
-      p.style.strokeDasharray  = `${length}`;
-      p.style.strokeDashoffset = `${length}`;
-      // Hide fill until fully drawn
+      p.style.strokeDasharray  = `${lengths[i]}`;
+      p.style.strokeDashoffset = `${lengths[i]}`;
       const origFill = p.getAttribute('fill');
       if (origFill && origFill !== 'none') {
         p.dataset.origFill = origFill;
         p.setAttribute('fill', 'none');
       }
-      return {
-        el: p, length,
-        startSec: delay + i * perStroke,
-        endSec:   delay + (i + 1) * perStroke,
-      };
     });
 
-    const tick = (ts) => {
-      // Use playStartTime from parent so elapsed is correct even if font
-      // loaded late. Fall back to first-frame if not provided.
-      const origin  = playStartTime ?? ts;
-      const elapsed = (ts - origin) / 1000;
+    startRef.current = null;
 
-      // Snap all finished strokes
-      meta.forEach(m => {
-        if (elapsed >= m.endSec) {
-          m.el.style.opacity          = '1';
-          m.el.style.strokeDashoffset = '0';
-          if (m.el.dataset.origFill) {
-            m.el.setAttribute('fill', m.el.dataset.origFill);
-            delete m.el.dataset.origFill;
+    const tick = (ts) => {
+      if (startRef.current === null) startRef.current = ts;
+      const elapsed = (ts - startRef.current) / 1000;
+
+      // Read live refs so speed changes take effect immediately
+      const dur = durationRef.current;
+      const dly = delayRef.current;
+      const perStroke = dur / totalStrokes;
+
+      // Snap finished strokes
+      strokes.forEach((p, i) => {
+        const endSec = dly + (i + 1) * perStroke;
+        if (elapsed >= endSec) {
+          p.style.opacity          = '1';
+          p.style.strokeDashoffset = '0';
+          if (p.dataset.origFill) {
+            p.setAttribute('fill', p.dataset.origFill);
+            delete p.dataset.origFill;
           }
         }
       });
 
-      // Find the currently active stroke
-      const activeIdx = meta.findIndex(
-        m => elapsed >= m.startSec && elapsed < m.endSec
-      );
+      // Find active stroke
+      const activeIdx = strokes.findIndex((_, i) => {
+        const startSec = dly + i * perStroke;
+        const endSec   = dly + (i + 1) * perStroke;
+        return elapsed >= startSec && elapsed < endSec;
+      });
 
       if (activeIdx === -1) {
         onTipMove?.({ active: false });
-        // Keep looping only if we haven't started yet
-        if (elapsed < delay) {
+        if (elapsed < dly + dur) {
           rafRef.current = requestAnimationFrame(tick);
         }
         return;
       }
 
-      const m = meta[activeIdx];
-      const t = Math.min(1, Math.max(0,
-        (elapsed - m.startSec) / (m.endSec - m.startSec)
-      ));
+      const p        = strokes[activeIdx];
+      const startSec = dly + activeIdx * perStroke;
+      const endSec   = dly + (activeIdx + 1) * perStroke;
+      const t        = Math.min(1, Math.max(0, (elapsed - startSec) / (endSec - startSec)));
+      const len      = lengths[activeIdx];
 
-      m.el.style.opacity          = '1';
-      m.el.style.strokeDashoffset = `${m.length * (1 - t)}`;
+      p.style.opacity          = '1';
+      p.style.strokeDashoffset = `${len * (1 - t)}`;
 
-      // Keep not-yet-started strokes hidden
-      meta.forEach((mm, i) => {
+      // Keep upcoming strokes hidden
+      strokes.forEach((pp, i) => {
         if (i > activeIdx) {
-          mm.el.style.opacity          = '0';
-          mm.el.style.strokeDashoffset = `${mm.length}`;
+          pp.style.opacity          = '0';
+          pp.style.strokeDashoffset = `${lengths[i]}`;
         }
       });
 
-      // Report tip for hand positioning
-      if (onTipMove && m.length > 0) {
+      // Hand tip position
+      if (onTipMove && len > 0) {
         try {
-          const pt     = m.el.getPointAtLength(t * m.length);
+          const pt     = p.getPointAtLength(t * len);
           const rect   = svgEl.getBoundingClientRect();
           const scaleX = rect.width  / vbW;
           const scaleY = rect.height / vbH;
@@ -154,16 +163,17 @@ export default function AnimatedTextReveal({
 
     return () => {
       cancelAnimationFrame(rafRef.current);
+      startRef.current = null;
       onTipMove?.({ active: false });
     };
+    // duration/delay intentionally NOT in deps — live refs handle updates
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [svgData, playing, duration, delay, playStartTime]);
+  }, [svgData, playing]);
 
   const strokeColor =
     graphic.boardType === 'blackboard' || graphic.boardType === 'greenboard'
       ? '#f1f5f9' : '#1a1a1a';
 
-  // While font is loading, show invisible placeholder (same size, no flash)
   if (!svgData) {
     return (
       <div style={{
@@ -173,7 +183,6 @@ export default function AnimatedTextReveal({
         fontSize: graphic.fontSize,
         color: strokeColor,
         whiteSpace: 'nowrap',
-        // Invisible but takes up space — no layout shift
         opacity: 0,
       }} />
     );

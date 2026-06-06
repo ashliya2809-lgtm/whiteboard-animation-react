@@ -7,7 +7,6 @@ import { getBoardStyle } from '../../utils/animation';
 const CANVAS_W = 800;
 const CANVAS_H = 450;
 
-/** Each graphic starts exactly when the previous one finishes. */
 function buildSequentialTimeline(graphics) {
   let cursor = 0;
   return graphics.map(g => {
@@ -27,12 +26,11 @@ export default function EditorCanvas({ playing = false }) {
   const boardStyle = getBoardStyle(project?.boardType ?? 'whiteboard');
   const timeline   = scene ? buildSequentialTimeline(scene.graphics) : [];
 
-  const tipRef        = useRef({ active: false });
-  const canvasRef     = useRef(null);
-  const activeIdRef   = useRef(null);
-  const playStartRef  = useRef(null);
+  const tipRef       = useRef({ active: false });
+  const canvasRef    = useRef(null);
+  const activeIdRef  = useRef(null);
+  const playStartRef = useRef(null);
 
-  // Track play start time for AnimatedTextReveal clock sync
   useEffect(() => {
     if (playing) playStartRef.current = performance.now();
     else         playStartRef.current = null;
@@ -48,6 +46,15 @@ export default function EditorCanvas({ playing = false }) {
     }
   }, []);
 
+  const handleCanvasClick = (e) => {
+    // Only deselect if the click landed directly on the canvas background,
+    // not on a child graphic item. e.target === e.currentTarget means the
+    // click was on the canvas div itself, not bubbled up from a child.
+    if (e.target === e.currentTarget) {
+      selectGraphic(null);
+    }
+  };
+
   return (
     <div
       ref={canvasRef}
@@ -58,7 +65,7 @@ export default function EditorCanvas({ playing = false }) {
         boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
         flexShrink: 0,
       }}
-      onClick={() => selectGraphic(null)}
+      onClick={handleCanvasClick}
     >
       {timeline.map(g => (
         <GraphicItem
@@ -66,7 +73,7 @@ export default function EditorCanvas({ playing = false }) {
           graphic={g}
           isSelected={selectedGraphicId === g.id}
           playing={playing}
-          seqDelay={g.seqDelay}            // ← pass sequential delay down
+          seqDelay={g.seqDelay}
           onTipMove={makeTipHandler(g.id)}
           playStartTime={playStartRef.current}
         />

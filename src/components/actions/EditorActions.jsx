@@ -1,20 +1,53 @@
+import { useRef, useState } from 'react';
 import { useStore } from '../../store';
 import GraphicListItem from './GraphicListItem';
 
 export default function EditorActions() {
-  const getSelectedScene = useStore(s => s.getSelectedScene);
+  const getSelectedScene  = useStore(s => s.getSelectedScene);
   const selectedGraphicId = useStore(s => s.selectedGraphicId);
-  const deleteGraphic = useStore(s => s.deleteGraphic);
+  const deleteGraphic     = useStore(s => s.deleteGraphic);
   const moveGraphicInList = useStore(s => s.moveGraphicInList);
-  const saveProject = useStore(s => s.saveProject);
-  const openPreviewModal = useStore(s => s.openPreviewModal);
-  const closeProject = useStore(s => s.closeProject);
+  const reorderGraphic    = useStore(s => s.reorderGraphic);
+  const saveProject       = useStore(s => s.saveProject);
+  const openPreviewModal  = useStore(s => s.openPreviewModal);
+  const closeProject      = useStore(s => s.closeProject);
   const openProjectSettings = useStore(s => s.openProjectSettings);
-  const openSceneSettings = useStore(s => s.openSceneSettings);
+  const openSceneSettings   = useStore(s => s.openSceneSettings);
 
-  const scene = getSelectedScene();
+  const scene    = getSelectedScene();
   const graphics = scene?.graphics ?? [];
   const hasSelected = !!selectedGraphicId;
+
+  // ── Drag state ─────────────────────────────────────────────────────────────
+  const dragFromIdx = useRef(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+
+  const handleDragStart = (idx) => (e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+    dragFromIdx.current = idx;
+    setTimeout(() => { if (e.currentTarget) e.currentTarget.style.opacity = '0.4'; }, 0);
+  };
+
+  const handleDragOver = (idx) => (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIdx(idx);
+  };
+
+  const handleDrop = (toIdx) => (e) => {
+    e.preventDefault();
+    setDragOverIdx(null);
+    const fromIdx = Number(e.dataTransfer.getData('text/plain'));
+    if (isNaN(fromIdx) || fromIdx === toIdx) return;
+    reorderGraphic(fromIdx, toIdx);
+  };
+
+  const handleDragEnd = (e) => {
+    dragFromIdx.current = null;
+    setDragOverIdx(null);
+    e.currentTarget.style.opacity = '1';
+  };
 
   return (
     <div style={{
@@ -33,14 +66,12 @@ export default function EditorActions() {
           letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10,
         }}>Actions</p>
 
-        {/* Action buttons */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           <ActionBtn color="#10b981" onClick={saveProject} icon="💾">Save</ActionBtn>
           <ActionBtn color="#3b82f6" onClick={openPreviewModal} icon="▶">Preview</ActionBtn>
           <ActionBtn color="#ef4444" onClick={closeProject} icon="✕">Close</ActionBtn>
         </div>
 
-        {/* Settings */}
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
           <ActionBtn color="#8b5cf6" onClick={openSceneSettings} icon="🎬" small>Scene</ActionBtn>
           <ActionBtn color="#f59e0b" onClick={openProjectSettings} icon="⚙" small>Project</ActionBtn>
@@ -57,8 +88,8 @@ export default function EditorActions() {
         </span>
         {hasSelected && (
           <div style={{ display: 'flex', gap: 4 }}>
-            <SmallBtn title="Move Up" onClick={() => moveGraphicInList(selectedGraphicId, -1)}>↑</SmallBtn>
-            <SmallBtn title="Move Down" onClick={() => moveGraphicInList(selectedGraphicId, 1)}>↓</SmallBtn>
+            <SmallBtn title="Move Up"   onClick={() => moveGraphicInList(selectedGraphicId, -1)}>↑</SmallBtn>
+            <SmallBtn title="Move Down" onClick={() => moveGraphicInList(selectedGraphicId,  1)}>↓</SmallBtn>
             <SmallBtn title="Delete" danger onClick={() => deleteGraphic(selectedGraphicId)}>🗑</SmallBtn>
           </div>
         )}
@@ -78,11 +109,16 @@ export default function EditorActions() {
             <p style={{ fontSize: 12, textAlign: 'center' }}>No items yet.<br/>Add from Library.</p>
           </div>
         ) : (
-          graphics.map(g => (
+          graphics.map((g, idx) => (
             <GraphicListItem
               key={g.id}
               graphic={g}
               isSelected={selectedGraphicId === g.id}
+              isDragOver={dragOverIdx === idx}
+              onDragStart={handleDragStart(idx)}
+              onDragOver={handleDragOver(idx)}
+              onDrop={handleDrop(idx)}
+              onDragEnd={handleDragEnd}
             />
           ))
         )}
